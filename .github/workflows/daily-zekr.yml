@@ -1,0 +1,25 @@
+name: Daily Zekr
+
+on:
+  schedule:
+    - cron: "0 10 * * *"
+      timezone: "Europe/Stockholm"
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Send daily zekr
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python send_daily_zekr.py
