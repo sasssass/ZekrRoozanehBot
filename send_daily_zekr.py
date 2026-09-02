@@ -88,6 +88,7 @@ def remember_group(groups: dict, chat: dict) -> None:
     group = normalize_group(chat)
     if group:
         groups[group["id"]] = group
+        print(f"Saved group: {group['title']} ({group['id']})")
 
 
 def forget_group(groups: dict, chat: dict) -> None:
@@ -107,15 +108,21 @@ def collect_group_updates(state: dict, groups: dict) -> None:
         },
     )
 
+    print(f"Telegram returned {len(response['result'])} update(s).")
+
     for update in response["result"]:
         state["last_update_id"] = max(state.get("last_update_id", 0), update["update_id"])
 
         if "message" in update:
+            chat = update["message"]["chat"]
+            print(f"Saw message in {chat.get('type')}: {chat.get('title') or chat.get('username') or chat.get('id')}")
             remember_group(groups, update["message"]["chat"])
 
         if "my_chat_member" in update:
             chat_member = update["my_chat_member"]
             status = chat_member["new_chat_member"]["status"]
+            chat = chat_member["chat"]
+            print(f"Saw bot membership update in {chat.get('type')}: {chat.get('title') or chat.get('id')} -> {status}")
             if status in {"member", "administrator"}:
                 remember_group(groups, chat_member["chat"])
             elif status in {"left", "kicked"}:
