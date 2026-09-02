@@ -2,9 +2,22 @@ name: Daily Zekr
 
 on:
   schedule:
-    - cron: "0 10 * * *"
+    - cron: "*/5 * * * *"
       timezone: "Europe/Stockholm"
   workflow_dispatch:
+    inputs:
+      send_now:
+        description: Send the zikr immediately
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-zekr
+  cancel-in-progress: false
 
 jobs:
   send:
@@ -21,5 +34,13 @@ jobs:
       - name: Send daily zekr
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          CHAT_IDS: ${{ secrets.CHAT_IDS }}
+          FORCE_SEND: ${{ github.event_name == 'workflow_dispatch' && inputs.send_now }}
         run: python send_daily_zekr.py
+
+      - name: Save discovered groups
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/group_chats.json data/state.json
+          git diff --cached --quiet || git commit -m "Update Telegram group list"
+          git push

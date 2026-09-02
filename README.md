@@ -4,7 +4,7 @@ This bot sends the daily ذکر روز every morning at 10:00 AM Stockholm time.
 
 ## No-server setup with GitHub Actions
 
-You can run this without buying a server. GitHub Actions can wake up every morning, send the message, and stop.
+You can run this without buying a server. GitHub Actions wakes up every 5 minutes, checks whether the bot was added to any groups, saves those group IDs, and sends once each day during the 10:00 Stockholm hour.
 
 1. Open your GitHub repository.
 2. Go to `Settings` -> `Secrets and variables` -> `Actions`.
@@ -12,33 +12,20 @@ You can run this without buying a server. GitHub Actions can wake up every morni
 
 ```text
 BOT_TOKEN=your_telegram_bot_token_here
-CHAT_IDS=-1001111111111,-1002222222222
 ```
 
 4. Go to the `Actions` tab.
 5. Open the `Daily Zekr` workflow.
 6. Click `Run workflow` once to test it.
 
-After that, GitHub runs `.github/workflows/daily-zekr.yml` every day at `10:00 Europe/Stockholm`.
+After that, GitHub runs `.github/workflows/daily-zekr.yml` every 5 minutes. It sends the zikr once per day during the `10:00 Europe/Stockholm` hour.
 
 To send to groups:
 
 1. Add the bot to each Telegram group.
 2. Make sure the bot is allowed to send messages.
-3. Send any message in the group.
-4. Open this URL in your browser after replacing the token:
-
-```text
-https://api.telegram.org/botYOUR_BOT_TOKEN/getUpdates
-```
-
-Look for `"chat":{"id":...}` in the result. Group IDs usually start with `-100`.
-
-Add every group ID to the `CHAT_IDS` secret, separated by commas:
-
-```text
--1001111111111,-1002222222222,-1003333333333
-```
+3. Send any message in the group, or mention the bot.
+4. GitHub Actions will discover and save the group ID automatically on its next run.
 
 ## What the bot does
 
