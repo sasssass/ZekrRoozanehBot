@@ -12,7 +12,7 @@ You can run this without buying a server. GitHub Actions can wake up every morni
 
 ```text
 BOT_TOKEN=your_telegram_bot_token_here
-CHAT_ID=your_telegram_chat_id_here
+CHAT_IDS=-1001111111111,-1002222222222
 ```
 
 4. Go to the `Actions` tab.
@@ -21,13 +21,24 @@ CHAT_ID=your_telegram_chat_id_here
 
 After that, GitHub runs `.github/workflows/daily-zekr.yml` every day at `10:00 Europe/Stockholm`.
 
-To find your `CHAT_ID`, send a message to your bot in Telegram, then open this URL in your browser after replacing the token:
+To send to groups:
+
+1. Add the bot to each Telegram group.
+2. Make sure the bot is allowed to send messages.
+3. Send any message in the group.
+4. Open this URL in your browser after replacing the token:
 
 ```text
 https://api.telegram.org/botYOUR_BOT_TOKEN/getUpdates
 ```
 
-Look for `"chat":{"id":...}` in the result. That number is your `CHAT_ID`.
+Look for `"chat":{"id":...}` in the result. Group IDs usually start with `-100`.
+
+Add every group ID to the `CHAT_IDS` secret, separated by commas:
+
+```text
+-1001111111111,-1002222222222,-1003333333333
+```
 
 ## What the bot does
 

@@ -7,7 +7,6 @@ from zoneinfo import ZoneInfo
 
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
-CHAT_ID = os.environ["CHAT_ID"]
 STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
 
 ZEKR_BY_WEEKDAY = {
@@ -37,9 +36,17 @@ def build_message() -> str:
     return f"ذکر روز {PERSIAN_WEEKDAYS[weekday]}\n\n{zekr}"
 
 
-def send_message(text: str) -> None:
+def get_chat_ids() -> list[str]:
+    chat_ids = os.environ.get("CHAT_IDS") or os.environ.get("CHAT_ID")
+    if not chat_ids:
+        raise RuntimeError("Set CHAT_IDS, for example: -1001111111111,-1002222222222")
+
+    return [chat_id.strip() for chat_id in chat_ids.split(",") if chat_id.strip()]
+
+
+def send_message(chat_id: str, text: str) -> None:
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = urllib.parse.urlencode({"chat_id": CHAT_ID, "text": text}).encode()
+    payload = urllib.parse.urlencode({"chat_id": chat_id, "text": text}).encode()
     request = urllib.request.Request(url, data=payload, method="POST")
 
     with urllib.request.urlopen(request, timeout=30) as response:
@@ -47,4 +54,6 @@ def send_message(text: str) -> None:
 
 
 if __name__ == "__main__":
-    send_message(build_message())
+    message = build_message()
+    for chat_id in get_chat_ids():
+        send_message(chat_id, message)
