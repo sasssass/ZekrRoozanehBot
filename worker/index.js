@@ -55,7 +55,13 @@ let botIdPromise = null;
 function botId(token) {
   if (!botIdPromise) {
     botIdPromise = telegram(token, "getMe", {})
-      .then((result) => result.result.id)
+      .then((body) => {
+        if (!body.ok) {
+          throw new Error(`getMe failed: ${body.error_code} ${body.description}`);
+        }
+
+        return body.result.id;
+      })
       .catch((error) => {
         botIdPromise = null; // don't cache a failure
         throw error;
@@ -63,16 +69,6 @@ function botId(token) {
   }
 
   return botIdPromise;
-}
-
-function isReplyToBot(message, ourId) {
-  const repliedTo = message.reply_to_message;
-  if (!repliedTo) return false;
-
-  // Never answer another bot, including ourselves.
-  if (message.from?.is_bot) return false;
-
-  return repliedTo.from?.id === ourId;
 }
 
 export default {
@@ -95,20 +91,31 @@ export default {
     }
 
     const message = update.message;
-    // Always 200: a non-2xx makes Telegram retry the same update.
-    if (!message) return new Response("ignored");
+    // Always 200 from here on: a non-2xx makes Telegram retry the same update.
+    if (!message || !message.reply_to_message) return new Response("ignored");
+    if (message.from?.is_bot) return new Response("ignored");
 
-    if (!isReplyToBot(message, await botId(env.BOT_TOKEN))) {
-      return new Response("ignored");
+    try {
+      // Asked only once we know this is a reply, so ordinary traffic is free.
+      if (message.reply_to_message.from?.id !== (await botId(env.BOT_TOKEN))) {
+        return new Response("ignored: reply to someone else");
+      }
+
+      const phrase = REPLY_PHRASES[Math.floor(Math.random() * REPLY_PHRASES.length)];
+      const sent = await telegram(env.BOT_TOKEN, "sendMessage", {
+        chat_id: message.chat.id,
+        text: phrase,
+        reply_to_message_id: message.message_id,
+      });
+
+      if (!sent.ok) {
+        return new Response(`sendMessage failed: ${sent.error_code} ${sent.description}`);
+      }
+
+      return new Response("replied");
+    } catch (error) {
+      // The caller is already past the secret check, so it is safe to say why.
+      return new Response(`error: ${error.message}`);
     }
-
-    const phrase = REPLY_PHRASES[Math.floor(Math.random() * REPLY_PHRASES.length)];
-    await telegram(env.BOT_TOKEN, "sendMessage", {
-      chat_id: message.chat.id,
-      text: phrase,
-      reply_to_message_id: message.message_id,
-    });
-
-    return new Response("replied");
   },
 };
