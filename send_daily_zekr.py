@@ -13,7 +13,9 @@ from zoneinfo import ZoneInfo
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
-SEND_HOUR = 10
+ZEKR_HOUR = 10
+REMINDER_HOUR = 14
+REMINDER_TEXT = "ذکر روزانه فراموش نشود"
 API_ATTEMPTS = 3
 GROUPS_FILE = Path("data/group_chats.json")
 STATE_FILE = Path("data/state.json")
@@ -78,10 +80,22 @@ def telegram_api(method: str, payload: Optional[dict] = None) -> dict:
     return result
 
 
-def build_message() -> str:
+def build_zekr_message() -> str:
     weekday = datetime.now(STOCKHOLM_TZ).strftime("%A")
     zekr = random.choice(ZEKR_BY_WEEKDAY[weekday])
     return f"ذکر روز {PERSIAN_WEEKDAYS[weekday]}\n\n{zekr}"
+
+
+def build_reminder_message() -> str:
+    return REMINDER_TEXT
+
+
+# One entry per daily message. Each slot dedupes on its own key, so a delayed
+# run sends whatever the day still owes without repeating what already went out.
+SCHEDULED_SENDS = (
+    {"key": "zekr", "hour": ZEKR_HOUR, "build": build_zekr_message},
+    {"key": "reminder", "hour": REMINDER_HOUR, "build": build_reminder_message},
+)
 
 
 def normalize_group(chat: dict) -> Optional[dict]:
@@ -152,34 +166,56 @@ def send_message(chat_id: str, text: str) -> bool:
         return False
 
 
-def should_send_now(state: dict, now: datetime) -> bool:
-    if os.environ.get("FORCE_SEND", "").lower() == "true":
+def force_send() -> bool:
+    return os.environ.get("FORCE_SEND", "").lower() == "true"
+
+
+def sent_dates(state: dict) -> dict:
+    """Per-slot last-sent dates, migrating the old single-slot key."""
+    dates = state.setdefault("sent_dates", {})
+    legacy = state.pop("last_sent_date", None)
+    if legacy and "zekr" not in dates:
+        dates["zekr"] = legacy
+
+    return dates
+
+
+def should_send_now(send: dict, dates: dict, now: datetime) -> bool:
+    if force_send():
         return True
 
-    if state.get("last_sent_date") == now.date().isoformat():
-        print(f"Already sent on {now.date().isoformat()}.")
+    if dates.get(send["key"]) == now.date().isoformat():
+        print(f"{send['key']}: already sent on {now.date().isoformat()}.")
         return False
 
-    if now.hour < SEND_HOUR:
-        print(f"Too early: {now:%H:%M} local, sending from {SEND_HOUR:02d}:00.")
+    if now.hour < send["hour"]:
+        print(f"{send['key']}: too early ({now:%H:%M} local, sends from {send['hour']:02d}:00).")
         return False
 
     return True
 
 
-def send_daily_zekr(state: dict, groups: dict, now: datetime) -> None:
+def broadcast(groups: dict, text: str) -> bool:
+    sent_any = False
+    for chat_id in sorted(groups):
+        sent_any = send_message(chat_id, text) or sent_any
+
+    return sent_any
+
+
+def run_scheduled_sends(state: dict, groups: dict, now: datetime) -> None:
     if not groups:
         print("No groups saved yet.")
         return
 
-    message = build_message()
-    sent_any = False
+    dates = sent_dates(state)
+    for send in SCHEDULED_SENDS:
+        if not should_send_now(send, dates, now):
+            continue
 
-    for chat_id in sorted(groups):
-        sent_any = send_message(chat_id, message) or sent_any
-
-    if sent_any and os.environ.get("FORCE_SEND", "").lower() != "true":
-        state["last_sent_date"] = now.date().isoformat()
+        if broadcast(groups, send["build"]()) and not force_send():
+            dates[send["key"]] = now.date().isoformat()
+            print(f"{send['key']}: sent.")
 
 
 def main() -> None:
@@ -188,9 +224,7 @@ def main() -> None:
 
     collect_group_updates(state, groups)
 
-    now = datetime.now(STOCKHOLM_TZ)
-    if should_send_now(state, now):
-        send_daily_zekr(state, groups, now)
+    run_scheduled_sends(state, groups, datetime.now(STOCKHOLM_TZ))
 
     write_json(STATE_FILE, state)
     write_json(GROUPS_FILE, groups)

@@ -15,6 +15,7 @@ load_dotenv()
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
 SUBSCRIBERS_FILE = Path("data/subscribers.json")
+REMINDER_TEXT = "ذکر روزانه فراموش نشود"
 
 ZEKR_BY_WEEKDAY = {
     "Saturday": ["یا رَبَّ الْعالَمین"],
@@ -82,14 +83,20 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(get_today_message())
 
 
-async def send_today_zekr(context: ContextTypes.DEFAULT_TYPE) -> None:
-    message = get_today_message()
-
+async def broadcast(context: ContextTypes.DEFAULT_TYPE, message: str) -> None:
     for chat_id in load_subscribers():
         try:
             await context.bot.send_message(chat_id=chat_id, text=message)
         except Exception as exc:
             print(f"Could not send message to {chat_id}: {exc}")
+
+
+async def send_today_zekr(context: ContextTypes.DEFAULT_TYPE) -> None:
+    await broadcast(context, get_today_message())
+
+
+async def send_zekr_reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
+    await broadcast(context, REMINDER_TEXT)
 
 
 def stockholm_now():
@@ -110,6 +117,13 @@ def main() -> None:
         time=time(hour=10, minute=0, tzinfo=STOCKHOLM_TZ),
         days=(0, 1, 2, 3, 4, 5, 6),
         name="daily_stockholm_zekr",
+    )
+
+    app.job_queue.run_daily(
+        send_zekr_reminder,
+        time=time(hour=14, minute=0, tzinfo=STOCKHOLM_TZ),
+        days=(0, 1, 2, 3, 4, 5, 6),
+        name="daily_stockholm_zekr_reminder",
     )
 
     print("Bot is running. Send /start to the bot in Telegram.")
