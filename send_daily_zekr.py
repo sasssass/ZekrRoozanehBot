@@ -6,9 +6,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
+
+from replies import REPLY_PHRASES
 
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
@@ -98,6 +101,30 @@ SCHEDULED_SENDS = (
 )
 
 
+@lru_cache(maxsize=1)
+def bot_user_id() -> int:
+    return telegram_api("getMe")["result"]["id"]
+
+
+def is_reply_to_bot(message: dict) -> bool:
+    replied_to = message.get("reply_to_message")
+    if not replied_to:
+        return False
+
+    # Never answer another bot, including ourselves.
+    if message.get("from", {}).get("is_bot"):
+        return False
+
+    return replied_to.get("from", {}).get("id") == bot_user_id()
+
+
+def answer_reply(message: dict) -> None:
+    phrase = random.choice(REPLY_PHRASES)
+    chat_id = str(message["chat"]["id"])
+    if send_message(chat_id, phrase, reply_to_message_id=message["message_id"]):
+        print(f"Answered a reply in {chat_id}: {phrase}")
+
+
 def normalize_group(chat: dict) -> Optional[dict]:
     if chat.get("type") not in {"group", "supergroup"}:
         return None
@@ -139,9 +166,13 @@ def collect_group_updates(state: dict, groups: dict) -> None:
         state["last_update_id"] = max(state.get("last_update_id", 0), update["update_id"])
 
         if "message" in update:
-            chat = update["message"]["chat"]
+            message = update["message"]
+            chat = message["chat"]
             print(f"Saw message in {chat.get('type')}: {chat.get('title') or chat.get('username') or chat.get('id')}")
-            remember_group(groups, update["message"]["chat"])
+            remember_group(groups, chat)
+
+            if is_reply_to_bot(message):
+                answer_reply(message)
 
         if "my_chat_member" in update:
             chat_member = update["my_chat_member"]
@@ -154,9 +185,13 @@ def collect_group_updates(state: dict, groups: dict) -> None:
                 forget_group(groups, chat_member["chat"])
 
 
-def send_message(chat_id: str, text: str) -> bool:
+def send_message(chat_id: str, text: str, reply_to_message_id: Optional[int] = None) -> bool:
+    payload = {"chat_id": chat_id, "text": text}
+    if reply_to_message_id is not None:
+        payload["reply_to_message_id"] = reply_to_message_id
+
     try:
-        telegram_api("sendMessage", {"chat_id": chat_id, "text": text})
+        telegram_api("sendMessage", payload)
         return True
     except urllib.error.HTTPError as exc:
         print(f"Could not send to {chat_id}: HTTP {exc.code} {exc.read().decode('utf-8')}")

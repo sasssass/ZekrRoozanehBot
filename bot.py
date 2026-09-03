@@ -7,7 +7,9 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+
+from replies import REPLY_PHRASES
 
 
 load_dotenv()
@@ -83,6 +85,22 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(get_today_message())
 
 
+async def answer_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.message
+    replied_to = message.reply_to_message if message else None
+    if not replied_to:
+        return
+
+    # Only answer a human replying to something this bot said.
+    if message.from_user and message.from_user.is_bot:
+        return
+
+    if not replied_to.from_user or replied_to.from_user.id != context.bot.id:
+        return
+
+    await message.reply_text(random.choice(REPLY_PHRASES))
+
+
 async def broadcast(context: ContextTypes.DEFAULT_TYPE, message: str) -> None:
     for chat_id in load_subscribers():
         try:
@@ -111,6 +129,7 @@ def main() -> None:
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stop", stop))
     app.add_handler(CommandHandler("today", today))
+    app.add_handler(MessageHandler(filters.REPLY & ~filters.COMMAND, answer_reply))
 
     app.job_queue.run_daily(
         send_today_zekr,

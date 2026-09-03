@@ -25,6 +25,10 @@ After that, GitHub runs `.github/workflows/daily-zekr.yml` every 30 minutes. Eac
 
 Note that GitHub throttles scheduled workflows and can delay a run by hours, so a message may arrive well after its nominal time. If you need punctual delivery, run `bot.py` on an always-on machine instead.
 
+### How fast replies arrive
+
+`bot.py` answers a reply within seconds, because it holds an open connection to Telegram. The GitHub Actions path only answers on its next poll, so an answer can lag by hours. If conversational replies matter, run `bot.py` on an always-on machine.
+
 To send to groups:
 
 1. Add the bot to each Telegram group.
@@ -39,6 +43,7 @@ To send to groups:
 - Users can test immediately with `/today`.
 - Every day at `10:00 Europe/Stockholm`, the bot sends that day's zikr to every subscribed chat.
 - Every day at `14:00 Europe/Stockholm`, it sends the reminder ذکر روزانه فراموش نشود.
+- When someone replies to one of the bot's messages, it answers with a random phrase from `replies.py` (30 of them, e.g. سلام برادر). It ignores replies aimed at other people and never answers another bot.
 - It works for private chats and groups, as long as `/start` is sent in that chat.
 
 ## Local setup
