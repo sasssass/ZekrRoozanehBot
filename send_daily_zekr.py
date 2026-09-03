@@ -71,6 +71,8 @@ def telegram_api(method: str, payload: Optional[dict] = None) -> dict:
             with urllib.request.urlopen(request, timeout=30) as response:
                 result = json.loads(response.read().decode("utf-8"))
             break
+        except urllib.error.HTTPError:
+            raise
         except (TimeoutError, urllib.error.URLError) as exc:
             if attempt == API_ATTEMPTS:
                 raise
@@ -151,14 +153,22 @@ def forget_group(groups: dict, chat: dict) -> None:
 
 def collect_group_updates(state: dict, groups: dict) -> None:
     offset = state.get("last_update_id", 0) + 1
-    response = telegram_api(
-        "getUpdates",
-        {
-            "offset": offset,
-            "timeout": 0,
-            "allowed_updates": json.dumps(["message", "my_chat_member"]),
-        },
-    )
+    try:
+        response = telegram_api(
+            "getUpdates",
+            {
+                "offset": offset,
+                "timeout": 0,
+                "allowed_updates": json.dumps(["message", "my_chat_member"]),
+            },
+        )
+    except urllib.error.HTTPError as exc:
+        if exc.code == 409:
+            print("Webhook is active, so getUpdates is unavailable; it answers replies instead.")
+            print("Using the saved group list for today's messages.")
+            return
+
+        raise
 
     print(f"Telegram returned {len(response['result'])} update(s).")
 
