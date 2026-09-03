@@ -106,6 +106,9 @@ export default {
         chat_id: message.chat.id,
         text: phrase,
         reply_to_message_id: message.message_id,
+        // If the message we are answering has been deleted, send the phrase
+        // unthreaded rather than losing it.
+        allow_sending_without_reply: true,
       });
 
       if (!sent.ok) {

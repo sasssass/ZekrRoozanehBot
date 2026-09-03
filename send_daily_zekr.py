@@ -199,6 +199,9 @@ def send_message(chat_id: str, text: str, reply_to_message_id: Optional[int] = N
     payload = {"chat_id": chat_id, "text": text}
     if reply_to_message_id is not None:
         payload["reply_to_message_id"] = reply_to_message_id
+        # If the message we are answering is gone by the time we get here, send
+        # the phrase unthreaded rather than losing it.
+        payload["allow_sending_without_reply"] = "true"
 
     try:
         telegram_api("sendMessage", payload)
