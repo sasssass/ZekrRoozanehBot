@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -12,6 +13,8 @@ from zoneinfo import ZoneInfo
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
+SEND_HOUR = 10
+API_ATTEMPTS = 3
 GROUPS_FILE = Path("data/group_chats.json")
 STATE_FILE = Path("data/state.json")
 
@@ -57,9 +60,17 @@ def telegram_api(method: str, payload: Optional[dict] = None) -> dict:
     if payload is not None:
         data = urllib.parse.urlencode(payload).encode()
 
-    request = urllib.request.Request(url, data=data, method="POST" if data else "GET")
-    with urllib.request.urlopen(request, timeout=30) as response:
-        result = json.loads(response.read().decode("utf-8"))
+    for attempt in range(1, API_ATTEMPTS + 1):
+        request = urllib.request.Request(url, data=data, method="POST" if data else "GET")
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            break
+        except (TimeoutError, urllib.error.URLError) as exc:
+            if attempt == API_ATTEMPTS:
+                raise
+            print(f"{method} failed ({exc}); retrying ({attempt}/{API_ATTEMPTS - 1}).")
+            time.sleep(2 * attempt)
 
     if not result.get("ok"):
         raise RuntimeError(result)
@@ -142,14 +153,18 @@ def send_message(chat_id: str, text: str) -> bool:
 
 
 def should_send_now(state: dict, now: datetime) -> bool:
-    force_send = os.environ.get("FORCE_SEND", "").lower() == "true"
-    already_sent_today = state.get("last_sent_date") == now.date().isoformat()
-    scheduled_window = now.hour == 10
-
-    if force_send:
+    if os.environ.get("FORCE_SEND", "").lower() == "true":
         return True
 
-    return scheduled_window and not already_sent_today
+    if state.get("last_sent_date") == now.date().isoformat():
+        print(f"Already sent on {now.date().isoformat()}.")
+        return False
+
+    if now.hour < SEND_HOUR:
+        print(f"Too early: {now:%H:%M} local, sending from {SEND_HOUR:02d}:00.")
+        return False
+
+    return True
 
 
 def send_daily_zekr(state: dict, groups: dict, now: datetime) -> None:
