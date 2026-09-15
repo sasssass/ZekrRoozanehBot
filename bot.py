@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
+from moderation import contains_profanity, warning_phrase
+from occasions import append_occasions, format_occasions
 from replies import REPLY_PHRASES
 
 
@@ -18,6 +20,7 @@ BOT_TOKEN = os.environ["BOT_TOKEN"]
 STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
 SUBSCRIBERS_FILE = Path("data/subscribers.json")
 REMINDER_TEXT = "ذکر روزانه فراموش نشود"
+NO_OCCASION_TEXT = "امروز مناسبت خاصی ثبت نشده است."
 
 ZEKR_BY_WEEKDAY = {
     "Saturday": ["یا رَبَّ الْعالَمین"],
@@ -75,26 +78,43 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def get_today_message() -> str:
-    weekday = stockholm_now().strftime("%A")
+    now = stockholm_now()
+    weekday = now.strftime("%A")
     zekr = random.choice(ZEKR_BY_WEEKDAY[weekday])
     persian_weekday = PERSIAN_WEEKDAYS[weekday]
-    return f"ذکر روز {persian_weekday}\n\n{zekr}"
+    return append_occasions(f"ذکر روز {persian_weekday}\n\n{zekr}", now.date())
 
 
 async def today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(get_today_message())
 
 
-async def answer_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def monasebat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(
+        format_occasions(stockholm_now().date()) or NO_OCCASION_TEXT
+    )
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
-    replied_to = message.reply_to_message if message else None
+    if not message:
+        return
+
+    # Never answer another bot, including ourselves.
+    if message.from_user and message.from_user.is_bot:
+        return
+
+    # A warning outranks a greeting, so someone who swears in a reply gets told
+    # off rather than thanked.
+    if contains_profanity(message.text or ""):
+        await message.reply_text(warning_phrase())
+        return
+
+    replied_to = message.reply_to_message
     if not replied_to:
         return
 
     # Only answer a human replying to something this bot said.
-    if message.from_user and message.from_user.is_bot:
-        return
-
     if not replied_to.from_user or replied_to.from_user.id != context.bot.id:
         return
 
@@ -129,7 +149,9 @@ def main() -> None:
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stop", stop))
     app.add_handler(CommandHandler("today", today))
-    app.add_handler(MessageHandler(filters.REPLY & ~filters.COMMAND, answer_reply))
+    app.add_handler(CommandHandler("monasebat", monasebat))
+    # Every text message, not just replies: the warning has to see them all.
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     app.job_queue.run_daily(
         send_today_zekr,

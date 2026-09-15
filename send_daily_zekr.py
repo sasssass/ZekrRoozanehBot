@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from moderation import contains_profanity, warning_phrase
+from occasions import append_occasions, format_occasions
 from replies import REPLY_PHRASES
 
 
@@ -86,9 +88,10 @@ def telegram_api(method: str, payload: Optional[dict] = None) -> dict:
 
 
 def build_zekr_message() -> str:
-    weekday = datetime.now(STOCKHOLM_TZ).strftime("%A")
+    now = datetime.now(STOCKHOLM_TZ)
+    weekday = now.strftime("%A")
     zekr = random.choice(ZEKR_BY_WEEKDAY[weekday])
-    return f"ذکر روز {PERSIAN_WEEKDAYS[weekday]}\n\n{zekr}"
+    return append_occasions(f"ذکر روز {PERSIAN_WEEKDAYS[weekday]}\n\n{zekr}", now.date())
 
 
 def build_reminder_message() -> str:
@@ -125,6 +128,26 @@ def answer_reply(message: dict) -> None:
     chat_id = str(message["chat"]["id"])
     if send_message(chat_id, phrase, reply_to_message_id=message["message_id"]):
         print(f"Answered a reply in {chat_id}: {phrase}")
+
+
+def warn_about_profanity(message: dict) -> None:
+    phrase = warning_phrase()
+    chat_id = str(message["chat"]["id"])
+    if send_message(chat_id, phrase, reply_to_message_id=message["message_id"]):
+        print(f"Warned about language in {chat_id}.")
+
+
+def handle_message(message: dict) -> None:
+    """Warn about swearing, otherwise greet a reply. A warning outranks a greeting."""
+    if message.get("from", {}).get("is_bot"):
+        return
+
+    if contains_profanity(message.get("text", "")):
+        warn_about_profanity(message)
+        return
+
+    if is_reply_to_bot(message):
+        answer_reply(message)
 
 
 def normalize_group(chat: dict) -> Optional[dict]:
@@ -181,8 +204,7 @@ def collect_group_updates(state: dict, groups: dict) -> None:
             print(f"Saw message in {chat.get('type')}: {chat.get('title') or chat.get('username') or chat.get('id')}")
             remember_group(groups, chat)
 
-            if is_reply_to_bot(message):
-                answer_reply(message)
+            handle_message(message)
 
         if "my_chat_member" in update:
             chat_member = update["my_chat_member"]

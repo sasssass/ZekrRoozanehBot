@@ -1,0 +1,96 @@
+"""Stdlib-only tests: `python -m unittest tests`.
+
+They cover the two pieces with real logic in them - the swear-word matcher and
+the calendar lookups. Everything else is a Telegram call.
+"""
+
+import unittest
+from datetime import date, timedelta
+
+from calendars import gregorian_to_hijri, gregorian_to_jalali
+from moderation import contains_profanity
+from occasions import append_occasions, format_occasions, occasions_for
+
+
+class ProfanityTest(unittest.TestCase):
+    def test_flags_swearing(self):
+        for text in (
+            "کیر",
+            "کس",
+            "کون",
+            "کیری",
+            "کونی",
+            "کسکش",
+            "کس کش",
+            "کص",
+            "برو کونتو بده",
+            "چه کیری",
+            "کسخل",
+        ):
+            with self.subTest(text=text):
+                self.assertTrue(contains_profanity(text))
+
+    def test_sees_through_evasions(self):
+        # Stretched, dotted, Arabic-spelled and zero-width-split writings.
+        for text in ("کییییییر", "ک.ی.ر", "کــــیر", "كير", "کس‌کش"):
+            with self.subTest(text=text):
+                self.assertTrue(contains_profanity(text))
+
+    def test_leaves_innocent_words_alone(self):
+        for text in (
+            "عکس",
+            "کسی",
+            "هیچ کس",
+            "هر کس",
+            "هیچ‌کس",
+            "کسب و کار",
+            "مسکونی",
+            "کسل",
+            "کسری",
+            "اکنون",
+            "تاکسی",
+            "انعکاس",
+            "سلام برادر",
+            "ذکر روزانه فراموش نشود",
+        ):
+            with self.subTest(text=text):
+                self.assertFalse(contains_profanity(text))
+
+    def test_ignores_empty_text(self):
+        self.assertFalse(contains_profanity(""))
+
+
+class CalendarTest(unittest.TestCase):
+    def test_jalali_new_year(self):
+        self.assertEqual(gregorian_to_jalali(date(2026, 3, 21)), (1405, 1, 1))
+        self.assertEqual(gregorian_to_jalali(date(2026, 3, 20)), (1404, 12, 29))
+
+    def test_jalali_known_dates(self):
+        self.assertEqual(gregorian_to_jalali(date(2026, 2, 11)), (1404, 11, 22))
+        self.assertEqual(gregorian_to_jalali(date(2025, 12, 21)), (1404, 9, 30))
+
+    def test_hijri_months_stay_in_range(self):
+        for offset in range(0, 1200, 7):
+            year, month, day = gregorian_to_hijri(date(2026, 1, 1) + timedelta(days=offset))
+            with self.subTest(offset=offset):
+                self.assertTrue(1 <= month <= 12)
+                self.assertTrue(1 <= day <= 30)
+                self.assertTrue(1440 < year < 1460)
+
+
+class OccasionsTest(unittest.TestCase):
+    def test_nowruz_is_listed(self):
+        self.assertIn("عید نوروز و آغاز سال نو", occasions_for(date(2026, 3, 21)))
+
+    def test_ordinary_day_has_no_block(self):
+        self.assertEqual(format_occasions(date(2026, 9, 16)), "")
+        self.assertEqual(append_occasions("ذکر روز", date(2026, 9, 16)), "ذکر روز")
+
+    def test_block_is_appended_when_there_is_one(self):
+        message = append_occasions("ذکر روز", date(2026, 3, 21))
+        self.assertTrue(message.startswith("ذکر روز\n\n"))
+        self.assertIn("عید نوروز", message)
+
+
+if __name__ == "__main__":
+    unittest.main()

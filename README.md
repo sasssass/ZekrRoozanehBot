@@ -41,10 +41,42 @@ To send to groups:
 - Users subscribe by sending `/start` to the bot.
 - Users unsubscribe by sending `/stop`.
 - Users can test immediately with `/today`.
-- Every day at `10:00 Europe/Stockholm`, the bot sends that day's zikr to every subscribed chat.
+- Users can ask for today's مناسبت with `/monasebat`.
+- Every day at `10:00 Europe/Stockholm`, the bot sends that day's zikr to every subscribed chat, with the day's مناسبت‌ها under it when there are any.
 - Every day at `14:00 Europe/Stockholm`, it sends the reminder ذکر روزانه فراموش نشود.
 - When someone replies to one of the bot's messages, it answers with a random phrase from `replies.py` (30 of them, e.g. سلام برادر). It ignores replies aimed at other people and never answers another bot.
+- When someone swears, it answers with a polite warning from `moderation.py` instead. The warning wins over the greeting, so a rude reply gets told off rather than thanked.
 - It works for private chats and groups, as long as `/start` is sent in that chat.
+
+## مناسبت‌های روز
+
+`occasions.py` holds the occasions - births, martyrdoms, eids and the solar-calendar days. Lunar ones are keyed by `(Hijri month, day)` and solar ones by `(Jalali month, day)`, and `calendars.py` converts today's date into both. Adding an occasion is one line in the matching table.
+
+The Persian solar conversion is exact. The Hijri one uses the tabular calendar, which can land a day off the calendar your group follows, because the real one waits for the new moon to be seen. If every lunar date looks one day early or late, set this environment variable wherever the bot runs:
+
+```text
+HIJRI_OFFSET_DAYS=1
+```
+
+`-1` shifts the other way. It moves every lunar occasion at once.
+
+## Warning about bad language
+
+`moderation.py` matches the roots کیر، کس، کص and کون, each only as a whole word with a known ending, so عکس، کسی، هیچ‌کس and مسکونی are left alone. Before matching it folds the usual evasions: Arabic spellings (`ي`, `ك`), diacritics, zero-width joiners, stretched letters (کیییییر) and dots between letters (ک.ی.ر).
+
+To add a word, add its root to `_ROOT_SUFFIXES` in `moderation.py`. To change what the bot says, edit `WARNING_PHRASES` in the same file.
+
+For this to work in a group, the bot has to see ordinary messages. Open BotFather, run `/setprivacy` for your bot and choose `Disable`. Otherwise Telegram only forwards commands and replies to the bot, and swearing in a plain message goes unnoticed.
+
+`worker/index.js` carries a JavaScript copy of both the phrases and these rules, because the Cloudflare editor cannot import from the repo. Keep the two in step when editing either side.
+
+## Tests
+
+```bash
+python -m unittest tests
+```
+
+They cover the swear-word matcher and the calendar lookups. No dependencies needed.
 
 ## Local setup
 
