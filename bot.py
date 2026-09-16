@@ -11,6 +11,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 
 from moderation import contains_profanity, warning_phrase
 from occasions import append_occasions, format_occasions
+from poems import format_poem
 from replies import REPLY_PHRASES
 
 
@@ -21,6 +22,7 @@ STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
 SUBSCRIBERS_FILE = Path("data/subscribers.json")
 REMINDER_TEXT = "ذکر روزانه فراموش نشود"
 NO_OCCASION_TEXT = "امروز مناسبت خاصی ثبت نشده است."
+POEM_HOUR = 18
 
 ZEKR_BY_WEEKDAY = {
     "Saturday": ["یا رَبَّ الْعالَمین"],
@@ -89,6 +91,10 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(get_today_message())
 
 
+async def poem(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(format_poem(stockholm_now().date()))
+
+
 async def monasebat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         format_occasions(stockholm_now().date()) or NO_OCCASION_TEXT
@@ -137,6 +143,10 @@ async def send_zekr_reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
     await broadcast(context, REMINDER_TEXT)
 
 
+async def send_daily_poem(context: ContextTypes.DEFAULT_TYPE) -> None:
+    await broadcast(context, format_poem(stockholm_now().date()))
+
+
 def stockholm_now():
     from datetime import datetime
 
@@ -150,6 +160,7 @@ def main() -> None:
     app.add_handler(CommandHandler("stop", stop))
     app.add_handler(CommandHandler("today", today))
     app.add_handler(CommandHandler("monasebat", monasebat))
+    app.add_handler(CommandHandler("poem", poem))
     # Every text message, not just replies: the warning has to see them all.
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
@@ -165,6 +176,13 @@ def main() -> None:
         time=time(hour=14, minute=0, tzinfo=STOCKHOLM_TZ),
         days=(0, 1, 2, 3, 4, 5, 6),
         name="daily_stockholm_zekr_reminder",
+    )
+
+    app.job_queue.run_daily(
+        send_daily_poem,
+        time=time(hour=POEM_HOUR, minute=0, tzinfo=STOCKHOLM_TZ),
+        days=(0, 1, 2, 3, 4, 5, 6),
+        name="daily_stockholm_poem",
     )
 
     print("Bot is running. Send /start to the bot in Telegram.")

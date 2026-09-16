@@ -1,13 +1,14 @@
 # Morning Zekr Roozaneh Telegram Bot
 
-This bot sends two messages a day, Stockholm time:
+This bot sends three messages a day, Stockholm time:
 
-- `10:00` - that day's ذکر روز
+- `10:00` - that day's ذکر روز, with the day's مناسبت‌ها under it
 - `14:00` - a reminder: ذکر روزانه فراموش نشود
+- `18:00` - شعر امروز, one Persian poem
 
 ## No-server setup with GitHub Actions
 
-You can run this without buying a server. GitHub Actions wakes up every 30 minutes, checks whether the bot was added to any groups, saves those group IDs, and sends each of the two daily messages once per day.
+You can run this without buying a server. GitHub Actions wakes up every 30 minutes, checks whether the bot was added to any groups, saves those group IDs, and sends each of the three daily messages once per day.
 
 1. Open your GitHub repository.
 2. Go to `Settings` -> `Secrets and variables` -> `Actions`.
@@ -41,9 +42,10 @@ To send to groups:
 - Users subscribe by sending `/start` to the bot.
 - Users unsubscribe by sending `/stop`.
 - Users can test immediately with `/today`.
-- Users can ask for today's مناسبت with `/monasebat`.
+- Users can ask for today's مناسبت with `/monasebat`, and for today's poem with `/poem`.
 - Every day at `10:00 Europe/Stockholm`, the bot sends that day's zikr to every subscribed chat, with the day's مناسبت‌ها under it when there are any.
 - Every day at `14:00 Europe/Stockholm`, it sends the reminder ذکر روزانه فراموش نشود.
+- Every day at `18:00 Europe/Stockholm`, it sends شعر امروز.
 - When someone replies to one of the bot's messages, it answers with a random phrase from `replies.py` (30 of them, e.g. سلام برادر). It ignores replies aimed at other people and never answers another bot.
 - When someone swears, it answers with a polite warning from `moderation.py` instead. The warning wins over the greeting, so a rude reply gets told off rather than thanked.
 - It works for private chats and groups, as long as `/start` is sent in that chat.
@@ -59,6 +61,10 @@ HIJRI_OFFSET_DAYS=1
 ```
 
 `-1` shifts the other way. It moves every lunar occasion at once.
+
+## شعر امروز
+
+`poems.py` holds the poems, each one a couplet with its poet. The poem is picked from the date rather than at random when the message is sent, so every chat gets the same poem on the same day, and the list is worked through in a shuffled order before any poem comes back around. Adding a poem is one line in `POEMS`; no state file is involved.
 
 ## Warning about bad language
 
@@ -76,7 +82,7 @@ For this to work in a group, the bot has to see ordinary messages. Open BotFathe
 python -m unittest tests
 ```
 
-They cover the swear-word matcher and the calendar lookups. No dependencies needed.
+They cover the swear-word matcher, the calendar lookups and the poem rotation. No dependencies needed.
 
 ## Local setup
 

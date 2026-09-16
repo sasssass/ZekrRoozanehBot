@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 from moderation import contains_profanity, warning_phrase
 from occasions import append_occasions, format_occasions
+from poems import format_poem
 from replies import REPLY_PHRASES
 
 
@@ -20,6 +21,7 @@ BOT_TOKEN = os.environ["BOT_TOKEN"]
 STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
 ZEKR_HOUR = 10
 REMINDER_HOUR = 14
+POEM_HOUR = 18
 REMINDER_TEXT = "ذکر روزانه فراموش نشود"
 API_ATTEMPTS = 3
 GROUPS_FILE = Path("data/group_chats.json")
@@ -98,11 +100,16 @@ def build_reminder_message() -> str:
     return REMINDER_TEXT
 
 
+def build_poem_message() -> str:
+    return format_poem(datetime.now(STOCKHOLM_TZ).date())
+
+
 # One entry per daily message. Each slot dedupes on its own key, so a delayed
 # run sends whatever the day still owes without repeating what already went out.
 SCHEDULED_SENDS = (
     {"key": "zekr", "hour": ZEKR_HOUR, "build": build_zekr_message},
     {"key": "reminder", "hour": REMINDER_HOUR, "build": build_reminder_message},
+    {"key": "poem", "hour": POEM_HOUR, "build": build_poem_message},
 )
 
 

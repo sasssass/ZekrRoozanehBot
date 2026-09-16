@@ -10,6 +10,7 @@ from datetime import date, timedelta
 from calendars import gregorian_to_hijri, gregorian_to_jalali
 from moderation import contains_profanity
 from occasions import append_occasions, format_occasions, occasions_for
+from poems import POEMS, format_poem, poem_for
 
 
 class ProfanityTest(unittest.TestCase):
@@ -90,6 +91,26 @@ class OccasionsTest(unittest.TestCase):
         message = append_occasions("ذکر روز", date(2026, 3, 21))
         self.assertTrue(message.startswith("ذکر روز\n\n"))
         self.assertIn("عید نوروز", message)
+
+
+class PoemTest(unittest.TestCase):
+    def test_same_day_gives_the_same_poem(self):
+        self.assertEqual(poem_for(date(2026, 9, 16)), poem_for(date(2026, 9, 16)))
+
+    def test_a_full_pass_uses_every_poem_once(self):
+        # Start where a pass does, so the window is one whole trip through the list.
+        start = date(2026, 9, 16)
+        start += timedelta(days=(-start.toordinal()) % len(POEMS))
+        picked = [poem_for(start + timedelta(days=offset)) for offset in range(len(POEMS))]
+        self.assertEqual(len(set(picked)), len(POEMS))
+
+    def test_message_carries_the_poem_and_the_poet(self):
+        message = format_poem(date(2026, 9, 16))
+        poet, lines = poem_for(date(2026, 9, 16))
+        self.assertTrue(message.startswith("شعر امروز\n\n"))
+        for line in lines:
+            self.assertIn(line, message)
+        self.assertTrue(message.endswith(f"— {poet}"))
 
 
 if __name__ == "__main__":
