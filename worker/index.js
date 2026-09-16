@@ -42,6 +42,16 @@ const REPLY_PHRASES = [
   "اجرت با صاحب الزمان",
 ];
 
+// The one answer a GIF gets, whatever the GIF is.
+const GIF_REPLY = "کیرخر";
+
+// Telegram sends a GIF as an animation, or as a document on older clients.
+const GIF_MIME_TYPES = ["image/gif", "video/mp4"];
+
+function isGif(message) {
+  return Boolean(message.animation) || GIF_MIME_TYPES.includes(message.document?.mime_type);
+}
+
 const WARNING_PHRASES = [
   "برادر، مودب باش. اینجا جای این حرف‌ها نیست.",
   "لطفاً ادب را رعایت کن.",
@@ -154,9 +164,9 @@ export default {
       let phrase;
       let outcome;
 
-      // A warning outranks a greeting, so someone who swears in a reply gets
-      // told off rather than thanked.
-      if (containsProfanity(message.text || "")) {
+      // A warning outranks everything else, so someone who swears in a reply or
+      // in a GIF caption gets told off rather than answered.
+      if (containsProfanity(message.text || message.caption || "")) {
         phrase = pick(WARNING_PHRASES);
         outcome = "warned";
       } else if (!message.reply_to_message) {
@@ -167,8 +177,8 @@ export default {
           return new Response("ignored: reply to someone else");
         }
 
-        phrase = pick(REPLY_PHRASES);
-        outcome = "replied";
+        phrase = isGif(message) ? GIF_REPLY : pick(REPLY_PHRASES);
+        outcome = isGif(message) ? "answered a gif" : "replied";
       }
 
       const sent = await telegram(env.BOT_TOKEN, "sendMessage", {

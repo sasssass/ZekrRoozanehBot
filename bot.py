@@ -12,7 +12,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 from moderation import contains_profanity, warning_phrase
 from occasions import append_occasions, format_occasions
 from poems import format_poem
-from replies import REPLY_PHRASES
+from replies import GIF_REPLY, REPLY_PHRASES
 
 
 load_dotenv()
@@ -23,6 +23,7 @@ SUBSCRIBERS_FILE = Path("data/subscribers.json")
 REMINDER_TEXT = "ذکر روزانه فراموش نشود"
 NO_OCCASION_TEXT = "امروز مناسبت خاصی ثبت نشده است."
 POEM_HOUR = 18
+GIF_MIME_TYPES = {"image/gif", "video/mp4"}
 
 ZEKR_BY_WEEKDAY = {
     "Saturday": ["یا رَبَّ الْعالَمین"],
@@ -101,6 +102,15 @@ async def monasebat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+def is_gif(message) -> bool:
+    """Telegram sends a GIF as an animation, or as a document on older clients."""
+    if message.animation:
+        return True
+
+    document = message.document
+    return bool(document and document.mime_type in GIF_MIME_TYPES)
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
     if not message:
@@ -110,9 +120,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if message.from_user and message.from_user.is_bot:
         return
 
-    # A warning outranks a greeting, so someone who swears in a reply gets told
-    # off rather than thanked.
-    if contains_profanity(message.text or ""):
+    # A warning outranks everything else, so someone who swears in a reply or in
+    # a GIF caption gets told off rather than answered.
+    if contains_profanity(message.text or message.caption or ""):
         await message.reply_text(warning_phrase())
         return
 
@@ -124,7 +134,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not replied_to.from_user or replied_to.from_user.id != context.bot.id:
         return
 
-    await message.reply_text(random.choice(REPLY_PHRASES))
+    await message.reply_text(GIF_REPLY if is_gif(message) else random.choice(REPLY_PHRASES))
 
 
 async def broadcast(context: ContextTypes.DEFAULT_TYPE, message: str) -> None:
@@ -162,7 +172,13 @@ def main() -> None:
     app.add_handler(CommandHandler("monasebat", monasebat))
     app.add_handler(CommandHandler("poem", poem))
     # Every text message, not just replies: the warning has to see them all.
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    # Animations and documents come along for the GIF answer.
+    app.add_handler(
+        MessageHandler(
+            (filters.TEXT | filters.ANIMATION | filters.Document.ALL) & ~filters.COMMAND,
+            handle_message,
+        )
+    )
 
     app.job_queue.run_daily(
         send_today_zekr,

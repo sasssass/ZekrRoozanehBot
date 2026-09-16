@@ -47,6 +47,7 @@ To send to groups:
 - Every day at `14:00 Europe/Stockholm`, it sends the reminder ذکر روزانه فراموش نشود.
 - Every day at `18:00 Europe/Stockholm`, it sends شعر امروز.
 - When someone replies to one of the bot's messages, it answers with a random phrase from `replies.py` (30 of them, e.g. سلام برادر). It ignores replies aimed at other people and never answers another bot.
+- When the reply is a GIF, it answers کیرخر instead of a phrase.
 - When someone swears, it answers with a polite warning from `moderation.py` instead. The warning wins over the greeting, so a rude reply gets told off rather than thanked.
 - It works for private chats and groups, as long as `/start` is sent in that chat.
 

@@ -4,6 +4,9 @@ Shared by both senders: bot.py (always-on, answers immediately) and
 send_daily_zekr.py (GitHub Actions, answers on its next poll).
 """
 
+# The one answer a GIF gets, whatever the GIF is.
+GIF_REPLY = "کیرخر"
+
 REPLY_PHRASES = (
     "سلام برادر",
     "سلام علیکم",

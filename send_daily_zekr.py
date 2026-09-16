@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from moderation import contains_profanity, warning_phrase
 from occasions import append_occasions, format_occasions
 from poems import format_poem
-from replies import REPLY_PHRASES
+from replies import GIF_REPLY, REPLY_PHRASES
 
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
@@ -24,6 +24,7 @@ REMINDER_HOUR = 14
 POEM_HOUR = 18
 REMINDER_TEXT = "ذکر روزانه فراموش نشود"
 API_ATTEMPTS = 3
+GIF_MIME_TYPES = {"image/gif", "video/mp4"}
 GROUPS_FILE = Path("data/group_chats.json")
 STATE_FILE = Path("data/state.json")
 
@@ -130,8 +131,16 @@ def is_reply_to_bot(message: dict) -> bool:
     return replied_to.get("from", {}).get("id") == bot_user_id()
 
 
+def is_gif(message: dict) -> bool:
+    """Telegram sends a GIF as an animation, or as a document on older clients."""
+    if message.get("animation"):
+        return True
+
+    return message.get("document", {}).get("mime_type") in GIF_MIME_TYPES
+
+
 def answer_reply(message: dict) -> None:
-    phrase = random.choice(REPLY_PHRASES)
+    phrase = GIF_REPLY if is_gif(message) else random.choice(REPLY_PHRASES)
     chat_id = str(message["chat"]["id"])
     if send_message(chat_id, phrase, reply_to_message_id=message["message_id"]):
         print(f"Answered a reply in {chat_id}: {phrase}")
@@ -149,7 +158,7 @@ def handle_message(message: dict) -> None:
     if message.get("from", {}).get("is_bot"):
         return
 
-    if contains_profanity(message.get("text", "")):
+    if contains_profanity(message.get("text") or message.get("caption") or ""):
         warn_about_profanity(message)
         return
 
