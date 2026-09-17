@@ -9,10 +9,12 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-from moderation import contains_profanity, warning_phrase
+from conversation import answer_for
+from moderation import comeback_phrase, contains_profanity, warning_phrase
 from occasions import append_occasions, format_occasions
 from poems import format_poem
 from replies import GIF_REPLY, REPLY_PHRASES
+from zekr import zekr_message
 
 
 load_dotenv()
@@ -24,27 +26,6 @@ REMINDER_TEXT = "ذکر روزانه فراموش نشود"
 NO_OCCASION_TEXT = "امروز مناسبت خاصی ثبت نشده است."
 POEM_HOUR = 18
 GIF_MIME_TYPES = {"image/gif", "video/mp4"}
-
-ZEKR_BY_WEEKDAY = {
-    "Saturday": ["یا رَبَّ الْعالَمین"],
-    "Sunday": ["یا ذَاالْجَلالِ وَالْإِکْرام"],
-    "Monday": ["یا قاضِیَ الْحاجات"],
-    "Tuesday": ["یا أَرْحَمَ الرَّاحِمین"],
-    "Wednesday": ["یا حَیُّ یا قَیّوم"],
-    "Thursday": ["لا إِلهَ إِلَّا اللَّهُ الْمَلِکُ الْحَقُّ الْمُبین"],
-    "Friday": ["اللَّهُمَّ صَلِّ عَلَی مُحَمَّدٍ وَ آلِ مُحَمَّدٍ وَ عَجِّلْ فَرَجَهُمْ"],
-}
-
-PERSIAN_WEEKDAYS = {
-    "Saturday": "شنبه",
-    "Sunday": "یکشنبه",
-    "Monday": "دوشنبه",
-    "Tuesday": "سه‌شنبه",
-    "Wednesday": "چهارشنبه",
-    "Thursday": "پنجشنبه",
-    "Friday": "جمعه",
-}
-
 
 def load_subscribers() -> set[int]:
     if not SUBSCRIBERS_FILE.exists():
@@ -81,11 +62,8 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def get_today_message() -> str:
-    now = stockholm_now()
-    weekday = now.strftime("%A")
-    zekr = random.choice(ZEKR_BY_WEEKDAY[weekday])
-    persian_weekday = PERSIAN_WEEKDAYS[weekday]
-    return append_occasions(f"ذکر روز {persian_weekday}\n\n{zekr}", now.date())
+    today = stockholm_now().date()
+    return append_occasions(zekr_message(today), today)
 
 
 async def today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -100,6 +78,15 @@ async def monasebat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         format_occasions(stockholm_now().date()) or NO_OCCASION_TEXT
     )
+
+
+def is_talking_to_us(message, bot_id: int) -> bool:
+    """A reply to something the bot said, or anything at all in a private chat."""
+    if message.chat and message.chat.type == "private":
+        return True
+
+    replied_to = message.reply_to_message
+    return bool(replied_to and replied_to.from_user and replied_to.from_user.id == bot_id)
 
 
 def is_gif(message) -> bool:
@@ -120,21 +107,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if message.from_user and message.from_user.is_bot:
         return
 
-    # A warning outranks everything else, so someone who swears in a reply or in
-    # a GIF caption gets told off rather than answered.
-    if contains_profanity(message.text or message.caption or ""):
-        await message.reply_text(warning_phrase())
+    text = message.text or message.caption or ""
+    talking_to_us = is_talking_to_us(message, context.bot.id)
+
+    # Swearing outranks everything else. Aimed at the bot it gets a comeback,
+    # anywhere else in the chat it gets the warning.
+    if contains_profanity(text):
+        await message.reply_text(comeback_phrase() if talking_to_us else warning_phrase())
         return
 
-    replied_to = message.reply_to_message
-    if not replied_to:
+    if not talking_to_us:
         return
 
-    # Only answer a human replying to something this bot said.
-    if not replied_to.from_user or replied_to.from_user.id != context.bot.id:
+    if is_gif(message):
+        await message.reply_text(GIF_REPLY)
         return
 
-    await message.reply_text(GIF_REPLY if is_gif(message) else random.choice(REPLY_PHRASES))
+    # Answer what was actually asked, and fall back to a phrase when the
+    # message is not something the bot knows how to read.
+    answer = answer_for(text, stockholm_now().date())
+    await message.reply_text(answer or random.choice(REPLY_PHRASES))
 
 
 async def broadcast(context: ContextTypes.DEFAULT_TYPE, message: str) -> None:

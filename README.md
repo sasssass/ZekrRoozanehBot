@@ -46,9 +46,10 @@ To send to groups:
 - Every day at `10:00 Europe/Stockholm`, the bot sends that day's zikr to every subscribed chat, with the day's مناسبت‌ها under it when there are any.
 - Every day at `14:00 Europe/Stockholm`, it sends the reminder ذکر روزانه فراموش نشود.
 - Every day at `18:00 Europe/Stockholm`, it sends شعر امروز.
-- When someone replies to one of the bot's messages, it answers with a random phrase from `replies.py` (30 of them, e.g. سلام برادر). It ignores replies aimed at other people and never answers another bot.
+- When someone replies to one of the bot's messages, it reads what the message is asking for and answers it - a greeting gets a greeting back, چطوری gets an answer, شعر gets today's poem. Anything it cannot read falls back to a random phrase from `replies.py`. It ignores replies aimed at other people and never answers another bot.
+- In a private chat every message counts as talking to the bot, so no reply is needed there.
 - When the reply is a GIF, it answers کیرخر instead of a phrase.
-- When someone swears, it answers with a polite warning from `moderation.py` instead. The warning wins over the greeting, so a rude reply gets told off rather than thanked.
+- When someone swears at the bot, it hands the insult back politely. Swearing anywhere else in the chat gets a plain warning instead. The warning wins over the greeting, so a rude reply gets told off rather than thanked.
 - It works for private chats and groups, as long as `/start` is sent in that chat.
 
 ## مناسبت‌های روز
@@ -67,6 +68,14 @@ HIJRI_OFFSET_DAYS=1
 
 `poems.py` holds the poems, each one a couplet with its poet. The poem is picked from the date rather than at random when the message is sent, so every chat gets the same poem on the same day, and the list is worked through in a shuffled order before any poem comes back around. Adding a poem is one line in `POEMS`; no state file is involved.
 
+## Answering messages
+
+`conversation.py` holds the intents: a few patterns and a few answers each, ordered from the most specific rule to the most general, first match wins. شعر، ذکر and مناسبت are answered with the real thing for that day; the rest are phrases. Adding an intent is one entry in `INTENTS`.
+
+The bot understands **Persian only**. A message written in the Latin alphabet - English or Finglish - is told so in Persian and no intent is tried. Patterns are matched twice, against the folded message and against one with stretched letters squashed, so سلاااام hits the same rule as سلام.
+
+`worker/index.js` carries the same intents, except شعر، ذکر and مناسبت: it cannot read the Python tables, so those three answer with the matching command instead.
+
 ## Warning about bad language
 
 `moderation.py` matches the roots کیر، کس، کص and کون, each only as a whole word with a known ending, so عکس، کسی، هیچ‌کس and مسکونی are left alone. Before matching it folds the usual evasions: Arabic spellings (`ي`, `ك`), diacritics, zero-width joiners, stretched letters (کیییییر) and dots between letters (ک.ی.ر).
@@ -83,7 +92,7 @@ For this to work in a group, the bot has to see ordinary messages. Open BotFathe
 python -m unittest tests
 ```
 
-They cover the swear-word matcher, the calendar lookups and the poem rotation. No dependencies needed.
+They cover the swear-word matcher, the intent matching, the calendar lookups and the poem rotation. No dependencies needed.
 
 ## Local setup
 

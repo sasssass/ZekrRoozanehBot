@@ -52,6 +52,50 @@ function isGif(message) {
   return Boolean(message.animation) || GIF_MIME_TYPES.includes(message.document?.mime_type);
 }
 
+// Answers to the things people actually write. The first match wins, so this
+// runs from the most specific rule to the most general. The worker cannot read
+// the poem, zekr or occasion tables (they are Python), so those three point at
+// the command instead of answering directly.
+const INTENTS = [
+  ["poem_request", [/شعر/u, /بیت بگو/u], ["شعر امروز را با دستور /poem بگیر برادر."]],
+  ["zekr_request", [/ذکر/u], ["ذکر امروز را با دستور /today بگیر برادر."]],
+  ["occasion_request", [/مناسبت/u, /چه روزیه/u], ["مناسبت امروز را با دستور /monasebat بگیر برادر."]],
+  ["good_morning", [/صبح ?(?:ت|شما)? ?بخیر/u], ["صبح تو هم بخیر برادر", "صبحت بخیر و برکت", "صبح بخیر. روز خوبی داشته باشی"]],
+  ["good_night", [/شب ?(?:ت|شما)? ?بخیر/u, /شب خوش/u], ["شب تو هم بخیر", "شبت خوش برادر", "شب بخیر. خواب راحت"]],
+  ["how_are_you", [/چطوری/u, /چطوره?ی/u, /خوبی/u, /حالت چطور/u, /چه خبر/u, /احوال/u], ["شکر خدا خوبم برادر. تو چطوری؟", "الحمدلله. تو خوبی؟", "سلامتی. ممنون که پرسیدی", "بد نیستم، تا خدا چه بخواهد. احوال تو؟"]],
+  ["thanks", [/مرسی/u, /ممنون/u, /مچکر/u, /متشکر/u, /تشکر/u, /سپاس/u, /دمت گرم/u], ["خواهش می‌کنم برادر", "قابلی نداشت", "سلامت باشی", "خدا خیرت بدهد"]],
+  ["goodbye", [/خداحافظ/u, /خدافظ/u, /خدا نگهدار/u, /فعلا/u, /بدرود/u], ["خدا نگهدار برادر", "به امان خدا", "در پناه حق", "فعلا. یا علی"]],
+  ["who_are_you", [/کی هستی/u, /تو چی هستی/u, /ربات/u, /بات/u], ["بنده ربات ذکر روزانه هستم. هر روز ذکر و شعر و مناسبت می‌فرستم.", "ربات ذکر روزانه‌ام برادر. با /today ذکر امروز را می‌گیری."]],
+  ["laughter", [/خخ/u, /ههه/u, /جوک/u, /😂/u, /🤣/u, /😹/u], ["خنده بر هر درد بی‌درمان دواست", "خدا همیشه خندان نگهت دارد", "قربان خنده‌ات برادر"]],
+  ["prayer_request", [/التماس دعا/u, /دعا کن/u, /یا علی/u, /یا حسین/u, /صلوات/u], ["اللهم صل علی محمد و آل محمد", "دعاگویت هستم برادر", "التماس دعا. یا علی مدد"]],
+  ["greeting", [/سلام/u, /سلم/u, /درود/u, /هلو/u], ["سلام برادر", "علیک سلام", "سلام و رحمت خدا بر تو", "سلام بر شما. خوش آمدی"]],
+  ["affirmation", [/\bاره\b/u, /\bبله\b/u, /\bباشه\b/u, /\bاوکی\b/u, /\bچشم\b/u], ["قربانت", "چشم برادر", "ارادت"]],
+];
+
+// The bot understands Persian only. Latin letters and no Persian ones - which
+// catches Finglish too - get told so before any intent is tried.
+const ENGLISH_ANSWERS = [
+  "ببخشید برادر، انگلیسی بلد نیستم. فارسی بنویس.",
+  "من فقط فارسی می‌فهمم. لطفاً فارسی بنویس.",
+  "انگلیسی سرم نمی‌شود برادر. به فارسی بگو.",
+  "فارسی بنویس تا جوابت را بدهم.",
+];
+
+// What the bot says back when the swearing is aimed at it. Polite on the
+// surface, and it still hands the insult back.
+const COMEBACK_PHRASES = [
+  "با کمال احترام، همین را برای خودت آرزو می‌کنم.",
+  "تشکر از محبتت برادر. عوضش برایت دعا می‌کنم.",
+  "بنده که چیزی نگفتم. گویا در آینه نگاه می‌کردی.",
+  "خدا از بزرگی کمت نکند. ادب هم چیز خوبی است.",
+  "قربانت. هر چه گفتی نصف نصف.",
+  "ما که رباتیم و دل نداریم، ولی جای تو خجالت کشیدیم.",
+  "شما لطف داری. بنده هم متقابلا برایت آرزوی ادب می‌کنم.",
+  "چشم برادر، پیامت رسید. جوابش را به خودت واگذار می‌کنم.",
+  "درست است که ربات هستم، اما تربیت دارم. شما هم داشته باش.",
+  "حرف بزرگ‌تر از دهانت است برادر. صلوات بفرست.",
+];
+
 const WARNING_PHRASES = [
   "برادر، مودب باش. اینجا جای این حرف‌ها نیست.",
   "لطفاً ادب را رعایت کن.",
@@ -83,14 +127,44 @@ const PROFANITY = [
 
 const INNOCENT_BEFORE_KOS = /(?:هر|هیچ|همان|ان|این|هم|نا)\s+(?:کس)(?![\u0621-\u06cc])/gu;
 
-// Fold the spellings and evasions that mean the same word.
-function normalize(text) {
+// Fold the spellings that mean the same thing, leaving the letters alone.
+// Repeated letters survive this, because ممنون and مکرر are ordinary words.
+function fold(text) {
   return text
     .replace(/[\u200b-\u200f\u0640]/gu, "")
     .replace(/[\u064b-\u0652\u0670]/gu, "")
     .replace(/[\u0621-\u06cc]/gu, (char) => ARABIC_LETTERS[char] || char)
-    .replace(/(?<=[\u0621-\u06cc])[.\-_*+](?=[\u0621-\u06cc])/gu, "")
-    .replace(/(.)\1+/gu, "$1");
+    .replace(/(?<=[\u0621-\u06cc])[.\-_*+](?=[\u0621-\u06cc])/gu, "");
+}
+
+// Collapse stretched letters, so کییییر and سلاااام read as one word.
+function squash(text) {
+  return text.replace(/(.)\1+/gu, "$1");
+}
+
+function normalize(text) {
+  return squash(fold(text));
+}
+
+function isEnglish(text) {
+  return /[a-z]/iu.test(text) && !/[\u0621-\u06cc]/u.test(text);
+}
+
+// Patterns are tried against the folded message and the squashed one, so
+// سلاااام hits the same rule as سلام.
+function answerFor(text) {
+  if (!text) return null;
+  if (isEnglish(text)) return pick(ENGLISH_ANSWERS);
+
+  const folded = fold(text);
+  const variants = [folded, squash(folded)];
+  for (const [, patterns, answers] of INTENTS) {
+    if (patterns.some((pattern) => variants.some((variant) => pattern.test(variant)))) {
+      return pick(answers);
+    }
+  }
+
+  return null;
 }
 
 function containsProfanity(text) {
@@ -164,21 +238,29 @@ export default {
       let phrase;
       let outcome;
 
-      // A warning outranks everything else, so someone who swears in a reply or
-      // in a GIF caption gets told off rather than answered.
-      if (containsProfanity(message.text || message.caption || "")) {
-        phrase = pick(WARNING_PHRASES);
-        outcome = "warned";
-      } else if (!message.reply_to_message) {
-        return new Response("ignored");
-      } else {
-        // Asked only once we know this is a reply, so ordinary traffic is free.
-        if (message.reply_to_message.from?.id !== (await botId(env.BOT_TOKEN))) {
-          return new Response("ignored: reply to someone else");
-        }
+      const text = message.text || message.caption || "";
+      const privateChat = message.chat?.type === "private";
+      // Asked only once we need it, so ordinary group traffic is free.
+      const aimedAtUs =
+        privateChat ||
+        (Boolean(message.reply_to_message) &&
+          message.reply_to_message.from?.id === (await botId(env.BOT_TOKEN)));
 
-        phrase = isGif(message) ? GIF_REPLY : pick(REPLY_PHRASES);
-        outcome = isGif(message) ? "answered a gif" : "replied";
+      // Swearing outranks everything else. Aimed at the bot it gets a comeback,
+      // anywhere else in the chat it gets the warning.
+      if (containsProfanity(text)) {
+        phrase = aimedAtUs ? pick(COMEBACK_PHRASES) : pick(WARNING_PHRASES);
+        outcome = aimedAtUs ? "answered back" : "warned";
+      } else if (!aimedAtUs) {
+        return new Response("ignored");
+      } else if (isGif(message)) {
+        phrase = GIF_REPLY;
+        outcome = "answered a gif";
+      } else {
+        // Answer what was actually asked, and fall back to a phrase when the
+        // message is not something the bot knows how to read.
+        phrase = answerFor(text) || pick(REPLY_PHRASES);
+        outcome = "replied";
       }
 
       const sent = await telegram(env.BOT_TOKEN, "sendMessage", {
