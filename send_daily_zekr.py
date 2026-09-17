@@ -11,10 +11,12 @@ from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from moderation import contains_profanity, warning_phrase
+from conversation import answer_for
+from moderation import comeback_phrase, contains_profanity, warning_phrase
 from occasions import append_occasions, format_occasions
 from poems import format_poem
 from replies import GIF_REPLY, REPLY_PHRASES
+from zekr import zekr_message
 
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
@@ -27,27 +29,6 @@ API_ATTEMPTS = 3
 GIF_MIME_TYPES = {"image/gif", "video/mp4"}
 GROUPS_FILE = Path("data/group_chats.json")
 STATE_FILE = Path("data/state.json")
-
-ZEKR_BY_WEEKDAY = {
-    "Saturday": ["یا رَبَّ الْعالَمین"],
-    "Sunday": ["یا ذَاالْجَلالِ وَالْإِکْرام"],
-    "Monday": ["یا قاضِیَ الْحاجات"],
-    "Tuesday": ["یا أَرْحَمَ الرَّاحِمین"],
-    "Wednesday": ["یا حَیُّ یا قَیّوم"],
-    "Thursday": ["لا إِلهَ إِلَّا اللَّهُ الْمَلِکُ الْحَقُّ الْمُبین"],
-    "Friday": ["اللَّهُمَّ صَلِّ عَلَی مُحَمَّدٍ وَ آلِ مُحَمَّدٍ وَ عَجِّلْ فَرَجَهُمْ"],
-}
-
-PERSIAN_WEEKDAYS = {
-    "Saturday": "شنبه",
-    "Sunday": "یکشنبه",
-    "Monday": "دوشنبه",
-    "Tuesday": "سه‌شنبه",
-    "Wednesday": "چهارشنبه",
-    "Thursday": "پنجشنبه",
-    "Friday": "جمعه",
-}
-
 
 def read_json(path: Path, default):
     if not path.exists():
@@ -91,10 +72,8 @@ def telegram_api(method: str, payload: Optional[dict] = None) -> dict:
 
 
 def build_zekr_message() -> str:
-    now = datetime.now(STOCKHOLM_TZ)
-    weekday = now.strftime("%A")
-    zekr = random.choice(ZEKR_BY_WEEKDAY[weekday])
-    return append_occasions(f"ذکر روز {PERSIAN_WEEKDAYS[weekday]}\n\n{zekr}", now.date())
+    today = datetime.now(STOCKHOLM_TZ).date()
+    return append_occasions(zekr_message(today), today)
 
 
 def build_reminder_message() -> str:
@@ -140,29 +119,46 @@ def is_gif(message: dict) -> bool:
 
 
 def answer_reply(message: dict) -> None:
-    phrase = GIF_REPLY if is_gif(message) else random.choice(REPLY_PHRASES)
+    if is_gif(message):
+        phrase = GIF_REPLY
+    else:
+        text = message.get("text") or message.get("caption") or ""
+        # Answer what was actually asked, and fall back to a phrase when the
+        # message is not something the bot knows how to read.
+        phrase = answer_for(text, datetime.now(STOCKHOLM_TZ).date()) or random.choice(REPLY_PHRASES)
+
     chat_id = str(message["chat"]["id"])
     if send_message(chat_id, phrase, reply_to_message_id=message["message_id"]):
         print(f"Answered a reply in {chat_id}: {phrase}")
 
 
-def warn_about_profanity(message: dict) -> None:
-    phrase = warning_phrase()
+def is_talking_to_us(message: dict) -> bool:
+    """A reply to something the bot said, or anything at all in a private chat."""
+    if message.get("chat", {}).get("type") == "private":
+        return True
+
+    return is_reply_to_bot(message)
+
+
+def warn_about_profanity(message: dict, aimed_at_us: bool) -> None:
+    phrase = comeback_phrase() if aimed_at_us else warning_phrase()
     chat_id = str(message["chat"]["id"])
     if send_message(chat_id, phrase, reply_to_message_id=message["message_id"]):
         print(f"Warned about language in {chat_id}.")
 
 
 def handle_message(message: dict) -> None:
-    """Warn about swearing, otherwise greet a reply. A warning outranks a greeting."""
+    """Answer a message aimed at the bot. Swearing outranks everything else."""
     if message.get("from", {}).get("is_bot"):
         return
 
+    aimed_at_us = is_talking_to_us(message)
+
     if contains_profanity(message.get("text") or message.get("caption") or ""):
-        warn_about_profanity(message)
+        warn_about_profanity(message, aimed_at_us)
         return
 
-    if is_reply_to_bot(message):
+    if aimed_at_us:
         answer_reply(message)
 
 

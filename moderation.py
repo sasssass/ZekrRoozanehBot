@@ -24,6 +24,21 @@ WARNING_PHRASES = (
     "الکلام کالدواء؛ حرف خوب بزن برادر.",
 )
 
+# What the bot says back when the swearing is aimed at it. Polite on the
+# surface, and it still hands the insult back.
+COMEBACK_PHRASES = (
+    "با کمال احترام، همین را برای خودت آرزو می‌کنم.",
+    "تشکر از محبتت برادر. عوضش برایت دعا می‌کنم.",
+    "بنده که چیزی نگفتم. گویا در آینه نگاه می‌کردی.",
+    "خدا از بزرگی کمت نکند. ادب هم چیز خوبی است.",
+    "قربانت. هر چه گفتی نصف نصف.",
+    "ما که رباتیم و دل نداریم، ولی جای تو خجالت کشیدیم.",
+    "شما لطف داری. بنده هم متقابلا برایت آرزوی ادب می‌کنم.",
+    "چشم برادر، پیامت رسید. جوابش را به خودت واگذار می‌کنم.",
+    "درست است که ربات هستم، اما تربیت دارم. شما هم داشته باش.",
+    "حرف بزرگ‌تر از دهانت است برادر. صلوات بفرست.",
+)
+
 # Characters people scatter through a word to slip past a filter.
 _INVISIBLE = re.compile(r"[​-‏ـ]")
 _DIACRITICS = re.compile(r"[ً-ْٰ]")
@@ -56,13 +71,25 @@ _PROFANITY = tuple(
 _INNOCENT_BEFORE_KOS = re.compile(r"(?:هر|هیچ|همان|ان|این|هم|نا)\s+(?:کس)(?![ء-ی])")
 
 
-def normalize(text: str) -> str:
-    """Fold the spellings and evasions that mean the same word."""
+def fold(text: str) -> str:
+    """Fold the spellings that mean the same thing, leaving the letters alone.
+
+    Repeated letters survive this, because ممنون and مکرر are ordinary words.
+    """
     text = _INVISIBLE.sub("", text)
     text = _DIACRITICS.sub("", text)
     text = "".join(_ARABIC_LETTERS.get(char, char) for char in text)
-    text = _INNER_SEPARATORS.sub("", text)
+    return _INNER_SEPARATORS.sub("", text)
+
+
+def squash(text: str) -> str:
+    """Collapse stretched letters, so کییییر and سلاااام read as one word."""
     return _REPEATS.sub(r"\1", text)
+
+
+def normalize(text: str) -> str:
+    """Fold the spellings and evasions that mean the same word."""
+    return squash(fold(text))
 
 
 def contains_profanity(text: str) -> bool:
@@ -76,3 +103,7 @@ def contains_profanity(text: str) -> bool:
 
 def warning_phrase() -> str:
     return random.choice(WARNING_PHRASES)
+
+
+def comeback_phrase() -> str:
+    return random.choice(COMEBACK_PHRASES)

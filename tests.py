@@ -8,6 +8,7 @@ import unittest
 from datetime import date, timedelta
 
 from calendars import gregorian_to_hijri, gregorian_to_jalali
+from conversation import answer_for, is_english, match_intent
 from moderation import contains_profanity
 from occasions import append_occasions, format_occasions, occasions_for
 from poems import POEMS, format_poem, poem_for
@@ -111,6 +112,46 @@ class PoemTest(unittest.TestCase):
         for line in lines:
             self.assertIn(line, message)
         self.assertTrue(message.endswith(f"— {poet}"))
+
+
+class ConversationTest(unittest.TestCase):
+    def test_reads_the_common_openings(self):
+        expected = {
+            "سلام": "greeting",
+            "سلاااام": "greeting",
+            "علیک سلام": "greeting",
+            "چطوری؟": "how_are_you",
+            "خوبی داداش": "how_are_you",
+            "ممنون برادر": "thanks",
+            "مرسی": "thanks",
+            "خداحافظ": "goodbye",
+            "صبح بخیر": "good_morning",
+            "شبت بخیر": "good_night",
+            "خخخخخ": "laughter",
+            "التماس دعا": "prayer_request",
+            "تو کی هستی؟": "who_are_you",
+            "باشه": "affirmation",
+        }
+        for text, intent in expected.items():
+            with self.subTest(text=text):
+                self.assertEqual(match_intent(text), intent)
+
+    def test_asking_for_something_answers_with_it(self):
+        day = date(2026, 3, 21)
+        self.assertIn("شعر امروز", answer_for("یه شعر بگو", day))
+        self.assertIn("ذکر روز", answer_for("ذکر امروز چیه؟", day))
+        self.assertIn("عید نوروز", answer_for("مناسبت امروز چیه؟", day))
+
+    def test_english_is_turned_away_in_persian(self):
+        self.assertTrue(is_english("hello"))
+        self.assertTrue(is_english("salam chetori"))
+        self.assertFalse(is_english("سلام"))
+        self.assertFalse(is_english("سلام hello"))
+        self.assertIn("فارسی", answer_for("how are you", date(2026, 9, 17)))
+
+    def test_unreadable_message_gets_no_answer(self):
+        self.assertIsNone(answer_for("یه چیز کاملا نامربوط", date(2026, 9, 17)))
+        self.assertIsNone(answer_for("", date(2026, 9, 17)))
 
 
 if __name__ == "__main__":
